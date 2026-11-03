@@ -1,7 +1,9 @@
-name: Deploy danfitnz site
+name: Build and deploy danfitnz
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "5 17 * * *"   # 6:05am NZDT daily: publishes that day's scheduled posts
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,13 +18,31 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      SITE_BASE: https://www.danfitnz.nz
+      SITE_OUT: ${{ github.workspace }}/build/site
     steps:
       - uses: actions/checkout@v4
-      - name: Unpack site
-        run: unzip -q danfitnz_site.zip -d build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build site
+        run: |
+          pip install --quiet pillow
+          unzip -q danfitnz_src.zip -d src
+          if [ -d posts ]; then cp posts/*.json src/site_src/posts/ 2>/dev/null || true; fi
+          python src/site_src/build.py
+          echo "www.danfitnz.nz" > build/site/CNAME
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build/danfitnz_site
+          path: build/site
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Notify Bing/IndexNow of today's new posts
+        continue-on-error: true
+        run: |
+          KEY=$(python -c "import json;print(json.load(open('src/site_src/config.json'))['indexnow_key'])")
+          URLS=$(python -c "import json;u=[x for x in open('build/site/today_urls.txt').read().split() if x];print(json.dumps(u+['https://www.danfitnz.nz/blog/','https://www.danfitnz.nz/sitemap.xml']))")
+          curl -s -X POST https://api.indexnow.org/indexnow -H "Content-Type: application/json" \
+            -d "{\"host\":\"www.danfitnz.nz\",\"key\":\"$KEY\",\"keyLocation\":\"https://www.danfitnz.nz/$KEY.txt\",\"urlList\":$URLS}" -w "%{http_code}\n"
