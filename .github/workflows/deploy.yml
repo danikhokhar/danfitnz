@@ -30,10 +30,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: excache
-          key: exmedia-v1
+          key: exmedia-v2
       - name: Build site
         run: |
-          pip install --quiet pillow
+          pip install --quiet pillow opencv-python-headless numpy
           unzip -q danfitnz_src.zip -d src
           if [ -d posts ]; then cp posts/*.json src/site_src/posts/ 2>/dev/null || true; fi
           EX_CACHE=$GITHUB_WORKSPACE/excache python src/site_src/build.py
